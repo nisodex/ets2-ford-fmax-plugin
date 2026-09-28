@@ -1,75 +1,67 @@
 # ETS2 Ford Trucks F-MAX Brand Bridge Plugin (x64)
 
 [![Build and Release Plugin](https://github.com/nisodex/ets2-ford-fmax-plugin/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/nisodex/ets2-ford-fmax-plugin/actions/workflows/build-and-release.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Steam Workshop](https://img.shields.io/badge/Steam%20Workshop-3459583210-blue.svg)](https://steamcommunity.com/sharedfiles/filedetails/?id=3459583210)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey.svg)]()
-[![ETS2 Compatibility](https://img.shields.io/badge/ETS2-1.50%20--%201.61%2B-green.svg)]()
+[![ETS2 Compatibility](https://img.shields.io/badge/ETS2-1.50%20--%201.61%2B-orange.svg)]()
 
-Native 64-bit SCS Telemetry SDK plugin for **Euro Truck Simulator 2** that dynamically unlocks and preserves the **Ford brand filter button** in the Quick Jobs (*Trabajos Rápidos*) menu.
+A native 64-bit SCS Telemetry SDK plugin for **Euro Truck Simulator 2** that dynamically unlocks and permanently preserves the **Ford brand filter button** in the Quick Jobs (*Trabajos Rápidos*) market menu.
+
+Companion plugin for the [Ford Trucks F-MAX Steam Workshop Mod](https://steamcommunity.com/sharedfiles/filedetails/?id=3459583210).
 
 ---
 
-## 🇪🇸 Descripción en Español
+## The Engine Problem
 
-En Euro Truck Simulator 2, el motor del juego ejecuta una rutina interna (`verify_dealer_brands` en RVA `0x88F77A`) al cargar cualquier mapa (`/map/europe.mbd`). Esta función escanea los concesionarios físicos del mapa y, si una marca no tiene un concesionario físico en los sectores cargados, ejecuta `vector::erase` eliminando la marca del vector de memoria activo (`[main_obj + 0x4038]`).
+In Euro Truck Simulator 2, the game engine runs an internal dealership verification routine (`verify_dealer_brands` at RVA `0x88F77A`) whenever a map is loaded (`/map/europe.mbd`). 
 
-Como Ford es una marca personalizada y el mapa base no contiene concesionarios de Ford, el juego elimina a Ford en cada arranque, haciendo que el botón de la marca nunca se dibuje en la barra lateral izquierda de *Trabajos Rápidos*.
+1. **Map Dealer Scan:** The engine scans all physical map items (`.base` sector files) for dealership prefabs.
+2. **Prune Routine (`0x88F81B`):** If a brand registered in `/def/vehicle/truck_dealer/` does not possess at least one physical dealership placed in the loaded map sectors, the engine explicitly invokes `prism::array_t::erase` to delete that brand from the active memory vector (`[main_obj + 0x4038]`).
+3. **Quick Jobs UI Impact (`0x1412DE720`):** When the player opens the Quick Jobs market, the UI loops strictly over `[main_obj + 0x4038]` to generate the brand filter buttons on the left sidebar. Because Ford has no physical dealership in the base Europe map, the engine deletes the Ford token (`0xC5A86`) on every startup, preventing the button from ever appearing.
 
-**Este plugin resuelve el problema de forma permanente:**
-1. Se carga de forma nativa al arrancar el juego mediante la API oficial de plugins de SCS Software (`bin/win_x64/plugins/`).
-2. Utiliza escaneo de firmas de memoria (*pattern scanning*) para localizar la rutina de poda y neutraliza la instrucción de borrado dinámicamente en RAM.
-3. Mantiene un guardián en segundo plano que asegura que el token de la marca (`0xC5A86 = 'ford'`) permanezca activo durante todo el juego.
-4. Permite mantener el mod principal (`ford_fmax.scs`) 100% limpio y compatible con **Steam Workshop**, sin necesidad de modificar sectores de mapa ni alterar archivos de ciudades.
+Modifying map sector files directly inside a truck mod is strictly forbidden by the **SCS Workshop Uploader** (which rejects `.base` and `.aux` files), and doing so in standalone mods risks major conflicts with map expansions (ProMods, RoExtended, etc.).
 
-### Instalación
-1. Descarga `ford_fmax_plugin.dll` desde la sección [Releases](https://github.com/nisodex/ets2-ford-fmax-plugin/releases).
-2. Copia `ford_fmax_plugin.dll` en la carpeta de plugins de tu instalación de ETS2:
+---
+
+## How This Plugin Works
+
+This plugin resolves the issue dynamically from memory without altering any game map files:
+
+1. **Native SCS Plugin Integration:** Automatically loaded by `eurotrucks2.exe` at game startup via the official SCS Telemetry plugin loader (`bin/win_x64/plugins/`).
+2. **Dynamic Byte-Level Patching:** Uses pattern scanning to find the `verify_dealer_brands` routine in `.text` and dynamically converts the conditional jump instruction at `0x88F797` (`0F 84` -> `E9 ... 90`) into an unconditional jump to the cleanup routine (`0x88F842`), completely bypassing the `vector::erase` loop in RAM.
+3. **Active Memory Guardian:** A lightweight background thread continuously monitors the economy manager (`[base + 0x36AE6D8] + 0x4038`), ensuring the Ford brand token (`0xC5A86`) remains persistently active across savegame loads and fast-travel transitions.
+4. **Diagnostic Logging:** Logs all runtime events and patch verification to `ford_fmax_plugin.log`.
+
+---
+
+## Installation
+
+1. Download `ford_fmax_plugin.dll` from the latest [GitHub Release](https://github.com/nisodex/ets2-ford-fmax-plugin/releases/latest).
+2. Copy `ford_fmax_plugin.dll` into your ETS2 plugins directory:
    ```text
    C:\Program Files (x86)\Steam\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\
    ```
-   *(Si la carpeta `plugins` no existe, créala).*
-3. Inicia el juego desde Steam. Al arrancar aparecerá el aviso oficial de SCS informando del uso de características SDK. Pulsa **OK**.
-4. ¡Listo! El botón con el óvalo oficial de Ford estará activo permanentemente en Trabajos Rápidos.
+   *(If the `plugins` folder does not exist, create it).*
+3. Launch Euro Truck Simulator 2 from Steam.
+4. When the standard official SCS Software SDK notification appears (*"Request to use advanced SDK features detected"*), click **OK**.
+5. Open **Quick Jobs** in-game: the official Ford oval brand filter button is now permanently visible on the left sidebar and filters jobs exclusively for the Ford F-MAX.
 
 ---
 
-## 🇬🇧 English Description
+## Building from Source
 
-In Euro Truck Simulator 2, the engine runs an internal pruning routine (`verify_dealer_brands` at RVA `0x88F77A`) every time a map is loaded. It scans the map sectors for physical dealerships; if a brand has no physical dealership on the active map, the engine invokes `vector::erase` to delete that brand from the active brand vector (`[main_obj + 0x4038]`).
+### Requirements
+* Windows 10 / 11 (64-bit)
+* Visual Studio 2022 / 2026 with C++ desktop tools (MSVC x64) or CMake 3.20+
 
-Because Ford is a standalone modded brand without vanilla map dealerships, the engine deletes Ford on every startup, preventing the Ford filter button from appearing on the left sidebar of the Quick Jobs market.
-
-**This plugin permanently solves the issue:**
-1. Loads natively on game startup via SCS Software's official plugin system (`bin/win_x64/plugins/`).
-2. Scans memory patterns to locate the pruning check and patches the conditional jump in RAM (`0x88F797`), bypassing the deletion loop.
-3. Runs a lightweight guardian thread ensuring the brand token (`0xC5A86 = 'ford'`) remains active across profile reload cycles.
-4. Keeps the main truck mod (`ford_fmax.scs`) 100% clean and compliant with **Steam Workshop** rules (no map sector edits required).
-
-### Installation
-1. Download `ford_fmax_plugin.dll` from [Releases](https://github.com/nisodex/ets2-ford-fmax-plugin/releases).
-2. Place `ford_fmax_plugin.dll` in your ETS2 binary plugins directory:
-   ```text
-   C:\Program Files (x86)\Steam\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\
-   ```
-   *(Create the `plugins` folder if it doesn't already exist).*
-3. Launch ETS2. When the standard SCS SDK confirmation dialog appears, click **OK**.
-4. The Ford brand filter button will now remain permanently available in Quick Jobs.
-
----
-
-## 🛠️ Compilación / Building from Source
-
-### Requisitos / Requirements
-- Windows 10/11 x64
-- Visual Studio 2022 / 2026 con herramientas C++ (MSVC x64) o CMake 3.20+
-
-### Con PowerShell (Recomendado)
+### Option A: 1-Click PowerShell Build (Recommended)
 ```powershell
 .\scripts\build.ps1 -Install
 ```
-El parámetro `-Install` compila la DLL e instala el archivo directamente en tu directorio de ETS2.
+The `-Install` switch automatically compiles the 64-bit DLL and copies it directly into your ETS2 installation directory.
 
-### Con CMake
+### Option B: CMake Build
 ```bash
 mkdir build && cd build
 cmake .. -A x64
@@ -78,6 +70,22 @@ cmake --build . --config Release
 
 ---
 
-## 📄 Licencia / License
+## Compatibility
 
-Distribuido bajo la licencia MIT. Consulta [LICENSE](LICENSE) para más detalles.
+* **Game:** Euro Truck Simulator 2 (64-bit Windows)
+* **Game Versions:** Tested and fully compatible with **1.50 through 1.61+**
+* **Truck Mod:** Compatible with [Ford Trucks F-MAX](https://steamcommunity.com/sharedfiles/filedetails/?id=3459583210) (and any other standalone mod utilizing the `ford` dealer token)
+* **Map Mods:** 100% compatible with all map mods (Vanilla, ProMods, TR Extended, RoExtended) since it does not touch map geometry.
+
+---
+
+## Related Projects
+
+* **Steam Workshop Mod:** [Ford Trucks F-MAX (Standalone)](https://steamcommunity.com/sharedfiles/filedetails/?id=3459583210)
+* **Official Website & Templates:** [SimülasyonTÜRK F-MAX Portal](https://fmax.simulasyonturk.com/?lang=en)
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
