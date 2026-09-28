@@ -1,0 +1,14 @@
+# Binaries and intermediate compiler files
+bin/
+*.obj
+*.exp
+*.lib
+*.log
+
+# Visual Studio / CMake build artifacts
+.vs/
+out/
+build/
+CMakeSettings.json
+*.VC.db
+*.opendb

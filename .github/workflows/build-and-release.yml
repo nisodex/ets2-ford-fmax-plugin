@@ -1,0 +1,43 @@
+name: Build and Release Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Compile 64-bit DLL
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path bin -Force
+          cl.exe /nologo /O2 /W3 /LD /std:c++17 src/ford_fmax_plugin.cpp /link /OUT:bin/ford_fmax_plugin.dll
+          Get-Item bin/ford_fmax_plugin.dll
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ford_fmax_plugin-x64
+          path: bin/ford_fmax_plugin.dll
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/ford_fmax_plugin.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
